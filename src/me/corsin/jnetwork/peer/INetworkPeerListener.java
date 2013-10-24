@@ -13,5 +13,7 @@ public interface INetworkPeerListener {
 
 	void onReceived(NetworkPeer peer, Object packet);
 	void onFailedReceived(NetworkPeer peer, Exception exception);
+	void onSent(NetworkPeer peer, Object packet);
+	void onFailedSend(NetworkPeer peer, Object packet, Exception exception);
 	
 }

@@ -13,12 +13,11 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
-import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Queue;
 
 import me.corsin.javatools.task.MultiThreadedTaskQueue;
+import me.corsin.javatools.task.SimpleTask;
 import me.corsin.javatools.task.TaskQueue;
 import me.corsin.jnetwork.peer.NetworkPeer;
 import me.corsin.jnetwork.protocol.INetworkProtocol;
@@ -30,7 +29,6 @@ public abstract class NetworkGate implements Closeable {
 	// VARIABLES
 	////////////////
 	
-	final private Queue<SendPacket> pendingPacketsToSend;
 	final private Map<Integer, NetworkPeer> peers;
 	final private TaskQueue queues;
 	private INetworkProtocol protocol;
@@ -47,7 +45,6 @@ public abstract class NetworkGate implements Closeable {
 	}
 	
 	public NetworkGate(INetworkProtocol protocol) {
-		this.pendingPacketsToSend = new ArrayDeque<SendPacket>();
 		this.peers = new HashMap<Integer, NetworkPeer>();
 		this.queues = new MultiThreadedTaskQueue(2);
 		this.setProtocol(protocol);
@@ -55,11 +52,6 @@ public abstract class NetworkGate implements Closeable {
 		this.queues.executeAsync(new Runnable() {
 			public void run() {
 				beginRead();
-			}
-		});
-		this.queues.executeAsync(new Runnable() {
-			public void run() {
-				beginWrite();
 			}
 		});
 	}
@@ -121,49 +113,13 @@ public abstract class NetworkGate implements Closeable {
 		}
 	}
 	
-	private void beginWrite() {
-		while (!this.isClosed()) {
-			SendPacket packet = null;
-			synchronized (this.pendingPacketsToSend) {
-				if (this.pendingPacketsToSend.isEmpty()) {
-					try {
-						this.pendingPacketsToSend.wait();
-					} catch (InterruptedException e) {
-					}
-				}
-				if (!this.pendingPacketsToSend.isEmpty()) {
-					packet = this.pendingPacketsToSend.poll();
-				}
-			}
-			
-			if (packet != null) {
-				InputStream inputStream = this.getProtocol().serialize(packet.getPacket());
-				
-				final SendPacket thePacket = packet;
-				try {
-					if (inputStream != null) {
-						this.sendPacket(inputStream, packet.getPeer().getAddress());
-						
-						this.executeOnAskedQueue(new Runnable() {
-							public void run() {
-								if (listener != null) {
-									listener.onSent(thePacket.getPeer(), thePacket.getPacket());
-								}
-							}
-						});
-					} else {
-						throw new NetworkGateException("The protocol did not serialize the packet");
-					}
-				} catch (final Exception e) {
-					this.executeOnAskedQueue(new Runnable() {
-						public void run() {
-							if (listener != null) {
-								listener.onFailedSend(thePacket.getPeer(), e);
-							}
-						}
-					});
-				}
-			}
+	private void write(final NetworkPeer peer, final Object packet) throws Exception {
+		InputStream inputStream = this.getProtocol().serialize(packet);
+
+		if (inputStream != null) {
+			this.sendPacket(inputStream, peer.getAddress());
+		} else {
+			throw new NetworkGateException("The protocol did not serialize the packet");
 		}
 	}
 	
@@ -184,10 +140,31 @@ public abstract class NetworkGate implements Closeable {
 	}
 	
 	public void send(Object packet, NetworkPeer peer) {
-		synchronized (this.pendingPacketsToSend) {
-			this.pendingPacketsToSend.add(new SendPacket(peer, packet));
-			this.pendingPacketsToSend.notifyAll();
-		}
+		final Object thePacket = packet;
+		final NetworkPeer thePeer = peer;
+		
+		Runnable writeTask = new SimpleTask() {
+			protected void perform() throws Throwable {
+				write(thePeer, thePacket);
+			}
+		}.setListener(new SimpleTask.TaskListener() {
+			public void onCompleted(Object taskCreator, final SimpleTask task) {
+				executeOnAskedQueue(new Runnable() {
+					public void run() {
+						if (listener != null) {
+							if (task.getThrownException() == null) {
+								listener.onSent(thePeer, thePacket);
+							} else {
+								listener.onFailedSend(thePeer, (Exception)task.getThrownException());
+							}
+						}
+						thePeer.signalSent(thePacket, (Exception)task.getThrownException());
+					}
+				});
+			}
+		});
+		
+		this.queues.executeAsync(writeTask);
 	}
 	
 	/**
@@ -217,11 +194,7 @@ public abstract class NetworkGate implements Closeable {
 	@Override
 	public void close() {
 		this.closed = true;
-		this.queues.dispose();
-		synchronized (this.pendingPacketsToSend) {
-			this.pendingPacketsToSend.clear();
-			this.pendingPacketsToSend.notifyAll();
-		}
+		this.queues.close();
 	}
 	
 	public NetworkPeer getPeerForAddress(InetSocketAddress socketAddress) {

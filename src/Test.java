@@ -2,8 +2,11 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 
+import sun.awt.event.IgnorePaintEvent;
+
 import me.corsin.jnetwork.gate.INetworkGateListener;
 import me.corsin.jnetwork.gate.UDPGate;
+import me.corsin.jnetwork.peer.INetworkPeerListener;
 import me.corsin.jnetwork.peer.NetworkPeer;
 import me.corsin.jnetwork.protocol.TextProtocol;
 
@@ -58,6 +61,29 @@ public class Test {
 			
 			UDPGate clientGate = new UDPGate(new TextProtocol());
 			NetworkPeer serverPeer = new NetworkPeer("127.0.0.1", serverGate.getPort());
+			serverPeer.setListener(new INetworkPeerListener() {
+				
+				@Override
+				public void onSent(NetworkPeer peer, Object packet) {
+					System.out.println("SENT " + packet);
+				}
+				
+				@Override
+				public void onReceived(NetworkPeer peer, Object packet) {
+					// TODO Auto-generated method stub
+					
+				}
+				
+				@Override
+				public void onFailedSend(NetworkPeer peer, Object packet,
+						Exception exception) {
+					System.out.println("FAILED SEND " + packet);
+				}
+				
+				@Override
+				public void onFailedReceived(NetworkPeer peer, Exception exception) {
+				}
+			});
 			clientGate.register(serverPeer);
 			
 			BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));

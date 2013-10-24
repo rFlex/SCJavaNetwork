@@ -78,6 +78,16 @@ public class NetworkPeer {
 		return (int)(value ^ (value >>> 32));
 	}
 	
+	public void signalSent(Object packet, Exception exception) {
+		if (this.listener != null) {
+			if (exception == null) {
+				this.listener.onSent(this, packet);
+			} else {
+				this.listener.onFailedSend(this, packet, exception);
+			}
+		}
+	}
+	
 	public void signalReceived(Object packet, Exception exception) {
 		if (this.listener != null) {
 			if (exception == null) {
