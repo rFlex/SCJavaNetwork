@@ -155,7 +155,7 @@ public abstract class NetworkGate implements Closeable {
 							if (task.getThrownException() == null) {
 								listener.onSent(thePeer, thePacket);
 							} else {
-								listener.onFailedSend(thePeer, (Exception)task.getThrownException());
+								listener.onFailedSend(thePeer, thePacket, (Exception)task.getThrownException());
 							}
 						}
 						thePeer.signalSent(thePacket, (Exception)task.getThrownException());
@@ -167,6 +167,12 @@ public abstract class NetworkGate implements Closeable {
 		this.queues.executeAsync(writeTask);
 	}
 	
+	public void sendToAllRegisteredPeer(Object packet) {
+		for (NetworkPeer peer : this.peers.values()) {
+			this.send(packet, peer);
+		}
+	}
+	
 	/**
 	 * Unregister the NetworkPeer from the gate. Every new packet that comes from the IP and port represented by this peer
 	 * will result in a new NetworkPeer being allocated
@@ -176,6 +182,10 @@ public abstract class NetworkGate implements Closeable {
 	public boolean unregister(NetworkPeer peer) {
 		peer.setGate(null);
 		return this.peers.remove(peer.hashCode()) != null;
+	}
+	
+	public boolean isRegistered(NetworkPeer peer) {
+		return this.peers.containsKey(peer.hashCode());
 	}
 	
 	/**

@@ -1,9 +1,4 @@
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.InetSocketAddress;
-
-import sun.awt.event.IgnorePaintEvent;
-
+import me.corsin.javatools.task.TaskQueue;
 import me.corsin.jnetwork.gate.INetworkGateListener;
 import me.corsin.jnetwork.gate.UDPGate;
 import me.corsin.jnetwork.peer.INetworkPeerListener;
@@ -28,6 +23,34 @@ public class Test {
 	////////////////////////
 	// CONSTRUCTORS
 	////////////////
+	
+	public static class ChatPeer extends NetworkPeer {
+		
+		private int iteration;
+		private String login;
+
+		public ChatPeer(NetworkPeer networkPeer) {
+			super(networkPeer);
+			this.setLogin("Player");
+		}
+
+		public int getIteration() {
+			return iteration;
+		}
+
+		public void setIteration(int iteration) {
+			this.iteration = iteration;
+		}
+
+		public String getLogin() {
+			return login;
+		}
+
+		public void setLogin(String login) {
+			this.login = login;
+		}
+		
+	}
 
 	////////////////////////
 	// METHODS
@@ -35,8 +58,9 @@ public class Test {
 	
 	public static void main(String[] args) {
 		try {
-			UDPGate serverGate = new UDPGate(new TextProtocol());
-			serverGate.setListener(new INetworkGateListener() {
+			final UDPGate gate = new UDPGate(new TextProtocol());
+			gate.setListener(new INetworkGateListener() {
+				
 				@Override
 				public void onSent(NetworkPeer peer, Object packet) {
 					
@@ -44,61 +68,58 @@ public class Test {
 				
 				@Override
 				public void onReceived(NetworkPeer peer, Object packet) {
-					System.out.println("[SERVER] " + packet);
+					if (!gate.isRegistered(peer)) {
+						peer = new ChatPeer(peer);
+						gate.register(peer);
+					}
+					
+					ChatPeer chatPeer = (ChatPeer)peer;
+					
+					String str = (String)packet;
+					
+					if (str.startsWith("\\")) {
+						String cmd = str.substring(1);
+						
+						if (cmd.startsWith("nickname ")) {
+							String newNickName = cmd.split(" " )[1];
+							
+							if (newNickName.endsWith("\n")) {
+								newNickName = newNickName.substring(0, newNickName.length() - 1);
+							}
+							gate.sendToAllRegisteredPeer(chatPeer.getLogin() + " changed login to " + newNickName + "\n");
+							chatPeer.setLogin(newNickName);
+							
+						} else if (cmd.startsWith("exit")) {
+							gate.unregister(peer);
+						}
+					} else {
+						gate.sendToAllRegisteredPeer(chatPeer.getLogin() + ": " + str);
+						
+					}
+
 				}
 				
 				@Override
-				public void onFailedSend(NetworkPeer peer, Exception exception) {
-					System.out.println("Failed send: " + exception.getMessage());
+				public void onFailedSend(NetworkPeer peer, Object packet, Exception exception) {
+					
 				}
 				
 				@Override
 				public void onFailedReceive(NetworkPeer peer, Exception exception) {
-					System.out.println("Failed receive: " + exception.getMessage());
-				}
-			});
-			System.out.println("Listening to " + serverGate.getPort());
-			
-			UDPGate clientGate = new UDPGate(new TextProtocol());
-			NetworkPeer serverPeer = new NetworkPeer("127.0.0.1", serverGate.getPort());
-			serverPeer.setListener(new INetworkPeerListener() {
-				
-				@Override
-				public void onSent(NetworkPeer peer, Object packet) {
-					System.out.println("SENT " + packet);
-				}
-				
-				@Override
-				public void onReceived(NetworkPeer peer, Object packet) {
-					// TODO Auto-generated method stub
 					
 				}
-				
-				@Override
-				public void onFailedSend(NetworkPeer peer, Object packet,
-						Exception exception) {
-					System.out.println("FAILED SEND " + packet);
-				}
-				
-				@Override
-				public void onFailedReceived(NetworkPeer peer, Exception exception) {
-				}
 			});
-			clientGate.register(serverPeer);
 			
-			BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+			System.out.println("Port:" + gate.getPort());
+			
+			TaskQueue taskQueue = new TaskQueue();
+			
+			gate.setCallBackTaskQueue(taskQueue);
+			
 			while (true) {
-				String str = reader.readLine();
-				
-				if (str.equals("quit")) {
-					clientGate.close();
-					serverGate.close();
-					return;
-				} else {
-					serverPeer.send(str);
-				}
+				taskQueue.flushTasks();
+				Thread.sleep(10);
 			}
-			
 		} catch (Exception e) {
 			e.printStackTrace();
 		}

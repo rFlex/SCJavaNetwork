@@ -22,10 +22,17 @@ public class NetworkPeer {
 	final private InetSocketAddress address;
 	private NetworkGate gate;
 	private INetworkPeerListener listener;
+	private int cachedHashCode;
+	private boolean hashCodeComputed;
 	
 	////////////////////////
 	// CONSTRUCTORS
 	////////////////
+
+	public NetworkPeer(NetworkPeer networkPeer) {
+		this(networkPeer.address, networkPeer.gate);
+	}
+
 	
 	public NetworkPeer(String ip, int port) {
 		this(ip, port, null);
@@ -41,7 +48,7 @@ public class NetworkPeer {
 	
 	public NetworkPeer(InetSocketAddress address, NetworkGate gate) {
 		this.address = address;
-		this.setGate(gate);
+		this.gate = gate;
 		
 		if (this.address == null) {
 			throw new NullPointerException("address");
@@ -100,7 +107,16 @@ public class NetworkPeer {
 	
 	@Override
 	public int hashCode() {
-		return computeHashCodeForAddress(this.address);
+		if (!this.hashCodeComputed) {
+			this.cachedHashCode = computeHashCodeForAddress(this.address); 
+		}
+		
+		return this.cachedHashCode;
+	}
+	
+	@Override
+	public String toString() {
+		return this.getIP() + ":" + this.getPort();
 	}
 
 	////////////////////////

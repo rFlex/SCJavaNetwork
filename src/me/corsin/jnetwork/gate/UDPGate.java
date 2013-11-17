@@ -57,6 +57,7 @@ public class UDPGate extends NetworkGate {
 		} else {
 			this.socket = new DatagramSocket(port);
 		}
+		
 		this.buffer = new byte[65536];
 		this.receivePacket = new DatagramPacket(this.buffer, this.buffer.length);
 	}

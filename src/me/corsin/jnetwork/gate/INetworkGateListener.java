@@ -15,7 +15,7 @@ public interface INetworkGateListener {
 
 	void onReceived(NetworkPeer peer, Object packet);
 	void onSent(NetworkPeer peer, Object packet);
-	void onFailedSend(NetworkPeer peer, Exception exception);
+	void onFailedSend(NetworkPeer peer, Object packet, Exception exception);
 	void onFailedReceive(NetworkPeer peer, Exception exception);
 	
 }
